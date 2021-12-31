@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from uuid import uuid4, UUID
-from typing import Dict, Tuple, List, Union
+from typing import Dict, Tuple, List, Union, Optional
 
 
 @dataclass
@@ -71,7 +71,7 @@ class LineEdge:
     u_component_pin: str
 
     def __repr__(self) -> str:
-        return f"{str(self.uuid)=} " \
+        return f"{str(self.uuid)} " \
                f"[{self.u_component_id}:{self.u_component_pin}] -> [{self.v_component_id}:{self.v_component_pin}]"
 
     def __init__(self, *args):
@@ -184,6 +184,8 @@ class VoltageDC(ComponentNode):
 
 
 class CircuitGraph:
+    # needs confirmation that references to list items can be held by dict and transparently modified
+    # otherwise extra step is to store position in list and then not change the order...
     _labels: Dict[str, Union[ComponentNode, LineEdge]]
     _l_edges: List[LineEdge] = None
     _c_nodes: List[ComponentNode] = None
@@ -199,7 +201,7 @@ class CircuitGraph:
         repr += '\nNode List:\n\t' + '\n\t'.join([f'[{str(e)}]' for e in self._l_edges])
         return repr
 
-    def define(self, label: str, item: Union[ComponentNode, LineEdge]):
+    def define(self, item: Union[ComponentNode, LineEdge], label: Optional[str] = None):
         if label in self._labels:
             raise KeyError('CircuitGraph.define(): Cannot define component')
         if isinstance(item, ComponentNode):
@@ -213,14 +215,16 @@ class CircuitGraph:
                 f"CircuitGraph.define(): Attempt to add unrecognised item type provided: {type(item).__name__}  with label {label}.")
 
     def link(self,
-             label: str,
              component_u_label_pin: Tuple[str, str],
              component_v_label_pin: Tuple[str, str],
-             line_properties: PhysicalProperties = PhysicalProperties(.1, 0., 0., 0.)):
+             line_properties: PhysicalProperties = PhysicalProperties(.1, 0., 0., 0.),
+             label: Optional[str] = None):
+        opt_label = label if label is not None else str(uuid4())
         u_id, u_pin = component_u_label_pin
         v_id, v_pin = component_v_label_pin
         edge = LineEdge(line_properties, u_id, u_pin, v_id, v_pin)
         self._labels[u_id].on_line_connect(u_pin, edge.uuid, line_properties)
         self._labels[v_id].on_line_connect(v_pin, edge.uuid, line_properties)
-        self.define(label, edge)
+        self._l_edges.append(edge)
+        self._labels[opt_label] = self._l_edges[-1]
         return edge.uuid
